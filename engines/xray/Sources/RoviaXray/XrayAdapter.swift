@@ -16,7 +16,14 @@ public struct XrayAdapter: TunnelEngine {
     }
 
     public func validate(_ configuration: CanonicalTunnelConfiguration) async throws -> ValidationReport {
-        throw EngineError.notIncludedInBuild("xray")
+        do {
+            _ = try XrayConfigCompiler().compile(configuration)
+            return ValidationReport(valid: true, warnings: [])
+        } catch let error as EngineError {
+            throw error
+        } catch {
+            throw EngineError.invalidConfiguration("uncompilable configuration")
+        }
     }
 
     public func prepare(_ configuration: CanonicalTunnelConfiguration) async throws -> PreparedEngineConfiguration {
@@ -34,16 +41,6 @@ public struct XrayAdapter: TunnelEngine {
     }
 
     public func probe(_ request: HealthProbeRequest) async throws -> HealthProbeResult {
-        throw EngineError.notIncludedInBuild("xray")
-    }
-}
-
-public struct XrayConfigCompiler: EngineConfigCompiler {
-    public typealias Output = Data
-
-    public init() {}
-
-    public func compile(_ configuration: CanonicalTunnelConfiguration) throws -> Data {
         throw EngineError.notIncludedInBuild("xray")
     }
 }
