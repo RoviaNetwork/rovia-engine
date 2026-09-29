@@ -45,29 +45,95 @@ public struct XrayConfigCompiler: EngineConfigCompiler {
             tags.append(tag)
             outbounds.append(try serverOutbound(server, tag: tag))
         }
-        outbounds.append(["protocol": "direct", "tag": "direct"])
-        outbounds.append(["protocol": "blackhole", "tag": "block"])
+        outbounds.append(["protocol": "freedom", "tag": "direct"])
+        outbounds.append([
+            "protocol": "blackhole",
+            "tag": "block",
+            "settings": ["response": ["type": "none"]],
+        ])
         outbounds.append(["protocol": "dns", "tag": "dns"])
+        let defaultTag: String
+        switch configuration.appConfig.routing.defaultAction {
+        case .direct:
+            defaultTag = "direct"
+        case .block:
+            defaultTag = "block"
+        case .group:
+            // The adapter orders the selected server first; the default route
+            // follows it. Group membership beyond that is not resolved here.
+            defaultTag = tags[0]
+        }
+        var rules: [[String: Any]] = [
+            ["type": "field", "port": "53", "outboundTag": "dns"],
+        ]
+        for rule in configuration.appConfig.routing.rules {
+            if let mapped = try ruleMapping(rule) {
+                rules.append(mapped)
+            }
+        }
+        rules.append(["type": "field", "inboundTag": ["tun"], "outboundTag": defaultTag])
         let config: [String: Any] = [
             "inbounds": [
                 ["protocol": "tun", "tag": "tun", "settings": [:] as [String: Any]],
                 [
                     "protocol": "socks",
                     "tag": "socks-in",
-                    "settings": ["auth": "noauth", "udp": true, "ip": "127.0.0.1", "port": 10808] as [String: Any],
+                    "listen": "127.0.0.1",
+                    "port": 10808,
+                    "settings": ["auth": "noauth", "udp": true, "ip": "127.0.0.1"] as [String: Any],
                 ],
             ],
             "outbounds": outbounds,
             "routing": [
                 "domainStrategy": "AsIs",
-                "rules": [
-                    ["type": "field", "port": "53", "outboundTag": "dns"],
-                    ["type": "field", "inboundTag": ["tun"], "outboundTag": tags[0]],
-                ],
+                "rules": rules,
             ] as [String: Any],
             "dns": dnsSection(policy: configuration.appConfig.dns),
         ]
         return try JSONSerialization.data(withJSONObject: config, options: [.sortedKeys])
+    }
+
+    /// Maps one canonical rule to an Xray field rule, or refuses loudly.
+    /// Disabled rules are omitted (Xray has no per-rule switch). `group`
+    /// actions need selection context the compiler does not have, so they
+    /// are refused with the rule id rather than silently routed.
+    private func ruleMapping(_ rule: RouteRule) throws -> [String: Any]? {
+        guard rule.enabled else { return nil }
+        let outbound: String
+        switch rule.action {
+        case .direct:
+            outbound = "direct"
+        case .block:
+            outbound = "block"
+        case .group:
+            throw EngineError.invalidConfiguration("rule \(rule.id) targets a group; group routing is not mapped yet")
+        }
+        var mapped: [String: Any] = ["type": "field", "outboundTag": outbound]
+        var domains: [String] = []
+        var ips: [String] = []
+        var ports: [String] = []
+        var networks: [String] = []
+        for matcher in rule.matchers {
+            switch matcher {
+            case let .domain(value):
+                domains.append(value)
+            case let .domainSuffix(value):
+                domains.append("domain:" + value)
+            case let .ipCIDR(value):
+                ips.append(value)
+            case let .port(value):
+                ports.append(String(value))
+            case let .portRange(lower, upper):
+                ports.append("\(lower)-\(upper)")
+            case let .network(value):
+                networks.append(value)
+            }
+        }
+        if !domains.isEmpty { mapped["domain"] = domains }
+        if !ips.isEmpty { mapped["ip"] = ips }
+        if !ports.isEmpty { mapped["port"] = ports.joined(separator: ",") }
+        if !networks.isEmpty { mapped["network"] = networks.joined(separator: ",") }
+        return mapped
     }
 
     // MARK: - Servers
@@ -79,6 +145,15 @@ public struct XrayConfigCompiler: EngineConfigCompiler {
         let secret = Self.placeholder(forKey: reference.key)
         switch server.protocolKind {
         case .vless:
+            var user: [String: Any] = [
+                "id": secret,
+                "encryption": "none",
+                "level": 0,
+            ]
+            // An empty flow is not "no flow" to Xray — omit the key instead.
+            if let flow = server.transport.options["flow"], !flow.isEmpty {
+                user["flow"] = flow
+            }
             return [
                 "protocol": "vless",
                 "tag": tag,
@@ -87,14 +162,7 @@ public struct XrayConfigCompiler: EngineConfigCompiler {
                         [
                             "address": server.endpoint.host,
                             "port": server.endpoint.port,
-                            "users": [
-                                [
-                                    "id": secret,
-                                    "encryption": "none",
-                                    "flow": server.transport.options["flow"] ?? "",
-                                    "level": 0,
-                                ],
-                            ],
+                            "users": [user],
                         ],
                     ],
                 ] as [String: Any],
@@ -155,19 +223,33 @@ public struct XrayConfigCompiler: EngineConfigCompiler {
         var settings: [String: Any] = ["network": transport.kind, "security": security]
         switch transport.kind {
         case "ws":
+            // `headers.Host` is deprecated in favor of the independent
+            // `host` field (Xray 26.x warns and will remove it).
             var ws: [String: Any] = ["path": options["path"] ?? "/"]
             if let host = options["host"] {
-                ws["headers"] = ["Host": host]
+                ws["host"] = host
             }
             settings["wsSettings"] = ws
         case "grpc":
-            settings["grpcSettings"] = ["serviceName": options["serviceName"] ?? ""]
-        case "http", "httpupgrade":
+            var grpc: [String: Any] = ["serviceName": options["serviceName"] ?? ""]
+            // The parser stores the link's `mode` (gun/multi); Xray's field
+            // is `multiMode`. There is no `mode` field on grpcSettings.
+            if options["mode"] == "multi" {
+                grpc["multiMode"] = true
+            }
+            settings["grpcSettings"] = grpc
+        case "http":
             var http: [String: Any] = ["path": options["path"] ?? "/"]
             if let host = options["host"] {
                 http["host"] = [host]
             }
             settings["httpSettings"] = http
+        case "httpupgrade":
+            var upgraded: [String: Any] = ["path": options["path"] ?? "/"]
+            if let host = options["host"] {
+                upgraded["host"] = host
+            }
+            settings["httpupgradeSettings"] = upgraded
         case "tcp":
             if options["headerType"] == "http" {
                 var request: [String: Any] = ["path": ["/"], "headers": [:] as [String: Any]]
