@@ -1,0 +1,15 @@
+{
+  "originHash" : "5d7ad9eb8da3cb7f27a81d4f7da8a29dab9d6dbc6f407305caed320af85728a9",
+  "pins" : [
+    {
+      "identity" : "rovia-core",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/RoviaNetwork/rovia-core.git",
+      "state" : {
+        "revision" : "748a33a8430138125aa4b891fdbeb105d1c4a1e8",
+        "version" : "0.2.1"
+      }
+    }
+  ],
+  "version" : 3
+}
