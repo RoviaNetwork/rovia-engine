@@ -19,7 +19,7 @@ let package = Package(
         .library(name: "RoviaSingBox", targets: ["RoviaSingBox"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/RoviaNetwork/rovia-core.git", exact: "0.2.1")
+        .package(url: "https://github.com/RoviaNetwork/rovia-core.git", exact: "0.2.3")
     ],
     targets: [
         .target(
