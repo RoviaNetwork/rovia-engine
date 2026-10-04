@@ -8,8 +8,11 @@ import Foundation
 public protocol LibXrayBridge: Sendable {
     /// Sends one Invoke request envelope, returns the raw response envelope.
     func invoke(_ requestJSON: String) throws -> String
-    /// Frees a response string previously returned by `invoke`, mirroring
-    /// `CGoFree`. Mocks may ignore it; the real bridge must not.
+    /// Frees a response string previously returned by `invoke`. Two memory
+    /// models exist: a cgo bridge must release the buffer (mirroring
+    /// `CGoFree`), while the gomobile bridge returns an autoreleased string
+    /// and has nothing to free — its `free` is a documented no-op. Mocks may
+    /// ignore it; a cgo bridge must not.
     func free(_ response: String)
 }
 

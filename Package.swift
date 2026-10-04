@@ -16,6 +16,7 @@ let package = Package(
     ],
     products: [
         .library(name: "RoviaXray", targets: ["RoviaXray"]),
+        .library(name: "RoviaXrayLive", targets: ["RoviaXrayLive"]),
         .library(name: "RoviaSingBox", targets: ["RoviaSingBox"]),
     ],
     dependencies: [
@@ -29,6 +30,19 @@ let package = Package(
                 .product(name: "RoviaConfig", package: "rovia-core"),
             ],
             path: "engines/xray/Sources/RoviaXray"
+        ),
+        // The pinned libXray build: the artifact is reproduced by rovia's
+        // tools/build-engine/xray/build-apple.sh, and this checksum is the
+        // digest recorded in that repository's engines.lock.json.
+        .binaryTarget(
+            name: "LibXray",
+            url: "https://github.com/RoviaNetwork/rovia-engine/releases/download/libxray-v26.9.9/LibXray.xcframework.zip",
+            checksum: "df84739eec41e181153d2c681f84cffc8c50b43ebe117d29e330e7049abee444"
+        ),
+        .target(
+            name: "RoviaXrayLive",
+            dependencies: ["RoviaXray", "LibXray"],
+            path: "engines/xray/Sources/RoviaXrayLive"
         ),
         .target(
             name: "RoviaSingBox",
