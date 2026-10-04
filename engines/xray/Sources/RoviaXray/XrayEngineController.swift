@@ -75,10 +75,10 @@ final class XrayEngineController: @unchecked Sendable {
 
     /// Counters for the diagnostic surface. Payloads never appear here — only
     /// how many datagrams the backpressure policy dropped in each direction.
-    func droppedCounts() async -> (outbound: UInt64, inbound: UInt64) {
+    func droppedCounts() async -> (outboundDrops: UInt64, inboundDrops: UInt64) {
         guard let pump else { return (0, 0) }
         let counters = pump.counters()
-        return (outbound: counters.outboundDrops, inbound: counters.inboundDrops)
+        return counters
     }
 
     private func closeDescriptors() {

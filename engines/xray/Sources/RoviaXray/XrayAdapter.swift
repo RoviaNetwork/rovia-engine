@@ -116,6 +116,16 @@ public struct XrayAdapter: TunnelEngine {
         return await controller.status()
     }
 
+    /// The pump's drop counters — the only traffic observability the adapter
+    /// exposes, per `PRIVACY.md`: counts, never payloads. Zeros before the
+    /// first start and after a stop.
+    public func pumpCounters() async -> (outboundDrops: UInt64, inboundDrops: UInt64) {
+        guard let controller else {
+            return (0, 0)
+        }
+        return await controller.droppedCounts()
+    }
+
     public func probe(_ request: HealthProbeRequest) async throws -> HealthProbeResult {
         throw EngineError.unsupportedCapability("health probe is not wired yet")
     }
