@@ -21,6 +21,7 @@ public enum LibXrayMethod: String, Sendable {
     case stopXray
     case testXray
     case xrayVersion
+    case getXrayState
 }
 
 public struct LibXrayRequest: Sendable {
@@ -202,6 +203,31 @@ public actor XrayRuntime {
                 throw error
             }
         }
+    }
+
+    /// Asks the engine itself whether it is still running. The state machine
+    /// reports what it was told; a dead Go runtime or a stopped core never
+    /// contradicts it, and the kill switch in the extension fires on this
+    /// answer — so a `running` state that the engine denies is reported as a
+    /// failure, not believed.
+    public func isEngineAlive() async -> Bool {
+        guard case .running = state else {
+            return false
+        }
+        guard let raw = try? await rawInvoke(method: .getXrayState, payload: [:]) else {
+            return false
+        }
+        defer { bridge.free(raw) }
+        guard let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let envelope = object as? [String: Any],
+              let success = envelope["success"] as? Bool, success,
+              let payload = envelope["data"] as? [String: Any],
+              let running = payload["running"] as? Bool
+        else {
+            return false
+        }
+        return running
     }
 
     private func resolveSecrets(in configJSON: Data) throws -> String {

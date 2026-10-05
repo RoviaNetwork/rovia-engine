@@ -28,6 +28,11 @@ final class XrayLiveAdapterTests: XCTestCase {
             switch method {
             case "xrayVersion":
                 return #"{"success":true,"data":{"version":"Xray 26.9.9"},"error":""}"#
+            case "getXrayState":
+                lock.lock()
+                let running = engineRunning
+                lock.unlock()
+                return #"{"success":true,"data":{"running":\#(running)},"error":""}"#
             case "testXray":
                 return #"{"success":true,"data":{},"error":""}"#
             case "runXray":
@@ -142,6 +147,12 @@ final class XrayLiveAdapterTests: XCTestCase {
         // placeholder was resolved through the secret reader.
         XCTAssertTrue(bridge.lastRunPayload.contains("xray.tun.fd"))
         XCTAssertTrue(bridge.lastRunPayload.contains("11111111-1111-4111-8111-111111111111"))
+
+        // The state machine says running, but the engine says otherwise: the
+        // status must believe the engine.
+        bridge.engineRunning = false
+        status = await adapter.status()
+        XCTAssertEqual(status, .failed("engine stopped reporting"))
 
         await adapter.stop()
         status = await adapter.status()

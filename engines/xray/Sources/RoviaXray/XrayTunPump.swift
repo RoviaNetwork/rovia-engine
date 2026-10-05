@@ -73,8 +73,11 @@ public final class XrayTunPump: @unchecked Sendable {
     /// How long one datagram may wait for a writable fd before it is dropped.
     private static let writeWaitNanoseconds: UInt64 = 5_000_000_000
     private static let pollSliceMilliseconds: Int32 = 100
-    /// Larger than any IP datagram: one read is one packet.
-    private static let bufferSize = 65536
+    /// Larger than any framed datagram the engine can emit: the biggest IP
+    /// packet plus the four-byte utun header. A smaller buffer would truncate
+    /// a maximal packet silently — a corrupted packet is worse than a dropped
+    /// one, and `read` has no MSG_TRUNC to warn us.
+    private static let bufferSize = 65_535 + 4
 
     public init() {}
 
