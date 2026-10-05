@@ -113,7 +113,13 @@ public struct XrayAdapter: TunnelEngine {
         guard let controller else {
             return .unavailable
         }
-        return await controller.status()
+        let state = await controller.status()
+        if case .running = state, await controller.isEngineAlive() == false {
+            // The state machine says running; the engine disagrees. The kill
+            // switch fires on this answer, so it has to be the truth.
+            return .failed("engine stopped reporting")
+        }
+        return state
     }
 
     /// The pump's drop counters — the only traffic observability the adapter

@@ -73,6 +73,11 @@ final class XrayEngineController: @unchecked Sendable {
         }
     }
 
+    /// The engine's own answer to "are you still running".
+    func isEngineAlive() async -> Bool {
+        await runtime.isEngineAlive()
+    }
+
     /// Counters for the diagnostic surface. Payloads never appear here — only
     /// how many datagrams the backpressure policy dropped in each direction.
     func droppedCounts() async -> (outboundDrops: UInt64, inboundDrops: UInt64) {
